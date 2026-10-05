@@ -1,0 +1,15 @@
+CREATE DATABASE IF NOT EXISTS db_mou CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE db_mou;
+
+CREATE TABLE IF NOT EXISTS mou_asuransi (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nama_asuransi VARCHAR(150) NOT NULL,
+  tanggal_mulai DATE NOT NULL,
+  tanggal_akhir DATE NOT NULL,
+  file_pdf VARCHAR(64) NOT NULL,
+  file_asli VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_nama (nama_asuransi),
+  INDEX idx_akhir (tanggal_akhir)
+) ENGINE=InnoDB;
