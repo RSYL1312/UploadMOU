@@ -1,57 +1,59 @@
 <?php
-require __DIR__ . '/config.php';
+require dirname(__FILE__) . '/config.php';
 
-// id tidak lagi dari URL: GET dari sesi (diset edit.php), POST dari field tersembunyi
-$id = $_SERVER['REQUEST_METHOD'] === 'POST' ? (int)($_POST['id'] ?? 0) : (int)($_SESSION['edit_id'] ?? 0);
-$data = ['nama_asuransi' => '', 'tanggal_mulai' => '', 'tanggal_akhir' => '', 'file_asli' => ''];
+// id tidak dari URL: GET dari sesi (diset edit.php), POST dari field tersembunyi
+$id = ($_SERVER['REQUEST_METHOD'] === 'POST') ? (int)ambil($_POST, 'id', 0) : (int)ambil($_SESSION, 'edit_id', 0);
+$data = array('nama_asuransi' => '', 'tanggal_mulai' => '', 'tanggal_akhir' => '', 'file_asli' => '', 'file_pdf' => '');
 if ($id) {
     $st = db()->prepare('SELECT * FROM mou_asuransi WHERE id = ?');
-    $st->execute([$id]);
-    $data = $st->fetch() ?: null;
-    if (!$data) { http_response_code(404); exit('Data tidak ditemukan.'); }
+    $st->execute(array($id));
+    $row = $st->fetch();
+    if (!$row) { http_status(404); exit('Data tidak ditemukan.'); }
+    $data = $row;
 }
 
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
-    $nama  = trim((string)($_POST['nama_asuransi'] ?? ''));
-    $mulai = (string)($_POST['tanggal_mulai'] ?? '');
-    $akhir = (string)($_POST['tanggal_akhir'] ?? '');
-    $data = array_merge($data, ['nama_asuransi' => $nama, 'tanggal_mulai' => $mulai, 'tanggal_akhir' => $akhir]);
+    $nama  = trim((string)ambil($_POST, 'nama_asuransi', ''));
+    $mulai = (string)ambil($_POST, 'tanggal_mulai', '');
+    $akhir = (string)ambil($_POST, 'tanggal_akhir', '');
+    $data = array_merge($data, array('nama_asuransi' => $nama, 'tanggal_mulai' => $mulai, 'tanggal_akhir' => $akhir));
     $ada_file = isset($_FILES['file_pdf']) && $_FILES['file_pdf']['error'] !== UPLOAD_ERR_NO_FILE;
     $baru = null;
 
     try {
-        if ($nama === '' || mb_strlen($nama) > 150) throw new RuntimeException('Nama asuransi wajib diisi (maks. 150 karakter).');
-        if (!valid_date($mulai) || !valid_date($akhir)) throw new RuntimeException('Format tanggal tidak valid.');
-        if ($akhir < $mulai) throw new RuntimeException('Tanggal akhir tidak boleh sebelum tanggal mulai.');
-        if (!$id && !$ada_file) throw new RuntimeException('File PDF wajib diupload.');
+        if ($nama === '' || panjang($nama) > 150) throw new UserError('Nama asuransi wajib diisi (maks. 150 karakter).');
+        if (!valid_date($mulai) || !valid_date($akhir)) throw new UserError('Format tanggal tidak valid.');
+        if ($akhir < $mulai) throw new UserError('Tanggal akhir tidak boleh sebelum tanggal mulai.');
+        if (!$id && !$ada_file) throw new UserError('File PDF wajib diupload.');
 
         if ($ada_file) $baru = simpan_pdf($_FILES['file_pdf']);
+        $asli = $ada_file ? potong(basename($_FILES['file_pdf']['name']), 255) : '';
 
         if ($id) {
-            $lama = $data['file_pdf'] ?? db()->query('SELECT file_pdf FROM mou_asuransi WHERE id = ' . $id)->fetchColumn();
+            $lama = $data['file_pdf'];
             if ($baru) {
                 $sql = 'UPDATE mou_asuransi SET nama_asuransi=?, tanggal_mulai=?, tanggal_akhir=?, file_pdf=?, file_asli=? WHERE id=?';
-                $par = [$nama, $mulai, $akhir, $baru, mb_substr(basename($_FILES['file_pdf']['name']), 0, 255), $id];
+                $par = array($nama, $mulai, $akhir, $baru, $asli, $id);
             } else {
                 $sql = 'UPDATE mou_asuransi SET nama_asuransi=?, tanggal_mulai=?, tanggal_akhir=? WHERE id=?';
-                $par = [$nama, $mulai, $akhir, $id];
+                $par = array($nama, $mulai, $akhir, $id);
             }
             db()->prepare($sql)->execute($par);
             if ($baru) hapus_pdf($lama);
             flash('Data berhasil diperbarui.');
         } else {
             db()->prepare('INSERT INTO mou_asuransi (nama_asuransi, tanggal_mulai, tanggal_akhir, file_pdf, file_asli) VALUES (?,?,?,?,?)')
-              ->execute([$nama, $mulai, $akhir, $baru, mb_substr(basename($_FILES['file_pdf']['name']), 0, 255)]);
+              ->execute(array($nama, $mulai, $akhir, $baru, $asli));
             flash('Data berhasil ditambahkan.');
         }
         unset($_SESSION['edit_id']);
         header('Location: index.php'); exit;
-    } catch (RuntimeException $ex) {
+    } catch (UserError $ex) {
         $error = $ex->getMessage();
         if ($baru) hapus_pdf($baru);
-    } catch (Throwable $ex) {
+    } catch (Exception $ex) {
         error_log($ex->getMessage());
         if ($baru) hapus_pdf($baru);
         $error = 'Terjadi kesalahan pada server.';

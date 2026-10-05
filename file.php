@@ -1,15 +1,15 @@
 <?php
-require __DIR__ . '/config.php';
+require dirname(__FILE__) . '/config.php';
 
 // Ambil file_pdf DAN nama_asuransi (dua-duanya diperlukan untuk penamaan)
 $st = db()->prepare('SELECT file_pdf, nama_asuransi FROM mou_asuransi WHERE id = ?');
-$st->execute([(int)($_GET['id'] ?? 0)]);
+$st->execute(array((int)ambil($_GET, 'id', 0)));
 $row  = $st->fetch();
-$name = $row['file_pdf'] ?? '';
+$name = $row ? $row['file_pdf'] : '';
 $path = $name ? UPLOAD_DIR . $name : '';
 
 if (!$name || !preg_match('/^[a-f0-9]{32}\.pdf$/', $name) || !is_file($path)) {
-    http_response_code(404); exit('File tidak ditemukan.');
+    http_status(404); exit('File tidak ditemukan.');
 }
 
 // Nama unduhan: "MOU - Nama Asuransi.pdf" (karakter berbahaya dibuang)
